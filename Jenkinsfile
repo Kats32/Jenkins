@@ -19,13 +19,11 @@ pipeline {
         stage('Build Docker Image') {
             steps {
                 script {
-                    dir('my-frontend') {
-                        echo "Building Docker Image..."
-                        sh """
-                        docker build -t ${DOCKER_HUB_USER}/${DOCKER_IMAGE}:${TAG} \
-                                     -t ${DOCKER_HUB_USER}/${DOCKER_IMAGE}:latest .
-                        """
-                    }
+                    echo "Building Docker Image..."
+                    sh """
+                    docker build -t ${DOCKER_HUB_USER}/${DOCKER_IMAGE}:${TAG} \
+                                 -t ${DOCKER_HUB_USER}/${DOCKER_IMAGE}:latest .
+                    """
                 }
             }
         }
@@ -33,21 +31,19 @@ pipeline {
         stage('Test Docker Image') {
             steps {
                 script {
-                    dir('my-frontend') {
-                        echo "Testing container..."
+                    echo "Testing container..."
 
-                        sh """
-                        docker rm -f temp-test-${TAG} || true
+                    sh """
+                    docker rm -f temp-test-${TAG} || true
 
-                        docker run -d \
-                        --name temp-test-${TAG} \
-                        -p 8085:80 \
-                        ${DOCKER_HUB_USER}/${DOCKER_IMAGE}:${TAG}
+                    docker run -d \
+                    --name temp-test-${TAG} \
+                    -p 8085:80 \
+                    ${DOCKER_HUB_USER}/${DOCKER_IMAGE}:${TAG}
 
-                        sleep 5
-                        docker ps | grep temp-test-${TAG}
-                        """
-                    }
+                    sleep 5
+                    docker ps | grep temp-test-${TAG}
+                    """
                 }
             }
         }
