@@ -1,8 +1,11 @@
 pipeline {
     agent any
 
-    tools {
-        nodejs "node18"   // Make sure NodeJS is configured in Jenkins
+    environment {
+        DOCKER_IMAGE = 'devops-frontend'
+        DOCKER_CREDS_ID = 'dockerhub-credentials'
+        DOCKER_HUB_USER = 'kavyaamrutha221'
+        TAG = "${env.BUILD_NUMBER}"
     }
 
     stages {
@@ -13,31 +16,80 @@ pipeline {
             }
         }
 
-        stage('Install Dependencies') {
+        stage('Build Docker Image') {
             steps {
-                sh 'npm install'
+                script {
+                    echo "Building Docker Image..."
+                    sh """
+                    docker build -t ${DOCKER_HUB_USER}/${DOCKER_IMAGE}:${TAG} \
+                                 -t ${DOCKER_HUB_USER}/${DOCKER_IMAGE}:latest .
+                    """
+                }
             }
         }
 
-        stage('Build') {
+        stage('Test Docker Image') {
             steps {
-                sh 'npm run build'
+                script {
+                    echo "Testing container..."
+
+                    sh """
+                    docker rm -f temp-test-${TAG} || true
+
+                    docker run -d \
+                    --name temp-test-${TAG} \
+                    -p 8085:80 \
+                    ${DOCKER_HUB_USER}/${DOCKER_IMAGE}:${TAG}
+
+                    sleep 5
+                    docker ps | grep temp-test-${TAG}
+                    """
+                }
             }
         }
 
-        stage('Archive Build') {
+        stage('Push Docker Image') {
             steps {
-                archiveArtifacts artifacts: 'build/**', fingerprint: true
+                script {
+
+                    withCredentials([usernamePassword(
+                        credentialsId: env.DOCKER_CREDS_ID,
+                        usernameVariable: 'DOCKER_USER',
+                        passwordVariable: 'DOCKER_PASS'
+                    )]) {
+
+                        sh """
+                        echo \$DOCKER_PASS | docker login -u \$DOCKER_USER --password-stdin
+
+                        docker push ${DOCKER_HUB_USER}/${DOCKER_IMAGE}:${TAG}
+                        docker push ${DOCKER_HUB_USER}/${DOCKER_IMAGE}:latest
+
+                        docker logout
+                        """
+                    }
+                }
             }
         }
     }
 
     post {
-        success {
-            echo 'Build Successful 🎉'
+        always {
+            echo "Cleaning workspace"
+
+            sh "docker rm -f temp-test-${TAG} || true"
+
+            sh "docker rmi ${DOCKER_HUB_USER}/${DOCKER_IMAGE}:${TAG} || true"
+            sh "docker rmi ${DOCKER_HUB_USER}/${DOCKER_IMAGE}:latest || true"
+
+            cleanWs()
         }
+
+        success {
+            echo "Build and push successful"
+        }
+
         failure {
-            echo 'Build Failed ❌'
+            echo "Pipeline failed"
         }
     }
 }
